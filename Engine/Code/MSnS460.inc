@@ -1,5 +1,5 @@
-************************************************************************************************
-************************************************************************************************
+;***********************************************************************************************
+;***********************************************************************************************
 ;   MSnS460.inc (include file for MSnS460.asm)
 ;   
 ;   Based on the work of Bruce Bowling and Al Grippo for the original B&G and Hi Res code.
@@ -20,9 +20,14 @@
 ; Rev 4: 7/04/12 - Modify code for tachH:tachL for Hi Res RPM calcs. Average 16 readings to
 ;                  to smooth things out.
 ;
-************************************************************************************************
+; Rev 5: 7/19/12 - Revise period averaging for Hi Res Tach calcs. Total periods for 250 ms
+;                  then divide by "tachcnt". Code is slower but works well.
+;                  Average "batt" and "ego" over 32 iterations to smooth things out 
+;                  (~250ms update)
+;
+;***********************************************************************************************
 
-************************************************************************************************
+;***********************************************************************************************
 ;***********************************************************************************************
 ; This variant of the Megasquirt code was developed as part of "Megacontrol", a complete 
 ; powertrain management system for fuel, ignition, and transmission control replacing the EECIV 
@@ -455,18 +460,28 @@ tachcurL:       ds 1    ; Tachometer period current Lo byte
 tachTH:         ds 1    ; Tachometer period total Hi byte 
 tachTM:         ds 1    ; Tachometer period total Mid byte 
 tachTL:         ds 1    ; Tachometer period total Lo byte
-tachcnt:        ds 1    ; Tachometer counter for tachometer period averaging time     
+tachcnt:        ds 1    ; Tachometer counter for tachometer period averaging time
+
+;***********************************************************************************************
+; "batt" average calculation variables
+;***********************************************************************************************
+     
+battTH:         ds 1    ; Battery ADC total Hi Byte     
+battTL:         ds 1    ; Battery ADC total Lo Byte     
+battcnt:        ds 1    ; Counter for battery voltage ADC averaging
+
+;***********************************************************************************************
+; "ego" average calculation variables
+;***********************************************************************************************
+     
+egoTH:          ds 1    ; EGO ADC total Hi Byte     
+egoTL:          ds 1    ; EGO ADC total Lo Byte     
+egocnt:         ds 1    ; Counter for EGO voltage ADC averaging
 blank1:         ds 1    ; Placeholder     
 blank2:         ds 1    ; Placeholder     
 blank3:         ds 1    ; Placeholder     
-blank4:         ds 1    ; Placeholder     
-blank5:         ds 1    ; Placeholder     
-blank6:         ds 1    ; Placeholder     
-blank7:         ds 1    ; Placeholder     
-blank8:         ds 1    ; Placeholder     
-blank9:         ds 1    ; Placeholder     
-blank10:        ds 1    ; Placeholder     
-
+blank4:         ds 1    ; Placeholder
+     
 ; - Memory location $00DA (decimal 202)
 
 ms_ram_end:

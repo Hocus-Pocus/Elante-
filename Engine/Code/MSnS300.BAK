@@ -1,6 +1,6 @@
-;***********************************************************************************************
-;***********************************************************************************************
-;   MSnS460.asm
+************************************************************************************************
+************************************************************************************************
+;   MSnS300.asm
 ;
 ;   Based on the work of Bruce Bowling and Al Grippo for the original B&G and Hi Res code.
 ;   Also Magnus Bjelk for his megasquirtnspark and the msnsextra team as well as all the
@@ -10,42 +10,26 @@
 ;
 ;   Robert Hiebert 2010
 ;
-; Rev 1: 4/10/11 - KPA bins changed to include 17 KPA. AFR target tables converted to Lambda.
-;                  ADC averaging put back in.
-;
-; Rev 2: 12/24/11 - Knock detector code added.
-;
-; Rev 3: 4/15/12 - ASE counter and bank flow rate variables and code changes
-;
-; Rev 4: 7/04/12 - Modify code for tachH:tachL for Hi Res RPM calcs. Average 16 readings to
-;                  to smooth things out.
-;
-; Rev 5: 7/19/12 - Revise period averaging for Hi Res Tach calcs. Total periods for 250 ms
-;                  then divide by "tachcnt". Code is slower but works well.
-;                  Average "batt" and "ego" over 32 iterations to smooth things out
-;                  (~250ms update)
-;
-;***********************************************************************************************
-;***********************************************************************************************
+************************************************************************************************
+************************************************************************************************
 
 ;***********************************************************************************************
 ; This variant of the Megasquirt code was developed as part of "Megacontrol", a complete
 ; powertrain management system for fuel, ignition, and transmission control replacing the EECIV
-; on a relatively stock, 1992 Ford Super Duty motorhome chassis. The Winnebago Elante 33 RQ is
-; equipped with the 7.5L V8 engine, 24 #/Hr injectors and E4OD transmission.  Fall back position
-; in case of "Megacontrol" failure is to revert to EECIV control, so it is as close as
-; practical to "Plug and Play". The code is a compilation of Megasquirtnspark, MegasquirtHR,
-; Megaspark, msns-extra and some additions and revisions of my own to suit my own needs. The HR
-; version of  fuel control was chosen for best resolution running the small stock injectors in
-; "8 squirts alternating" mode. Added features are a modified version of Megabaro, Fuel and
-; Ignition Trim control, and the vehicle speed and ignition monitor inputs. A manual control for
-; the PWM bypass idle air is part of the transmission controller. A Manual Decel Fuel Cut Enable
-; and exhaust brake is also part of the transmission controller.
+; on a relatively stock, daily driven 1995 Ford E-150. The E-150 is equipped with a 4.9L inline
+; 6 cyl engine 19 #/Hr injectors and E4OD transmission.  Fall back position in case of
+; "Megacontrol" failure is to revert to EECIV control, so it is as close as practical to
+; "Plug and Play". The code is a compilation of Megasquirtnspark, MegasquirtHR, Megaspark,
+; msns-extra and some additions and revisions of my own to suit my own needs. The HR version of
+; fuel control was chosen for best resolution running the small stock injectors in "6 squirts
+; alternating" mode. Added features are a modified version of Megabaro, Fuel and Ignition Trim
+; control, and the vehicle speed and ignition monitor inputs. A manual control for the PWM
+; bypass idle air is part of the transmission controller. A Manual Decel Fuel Cut Enable is
+; also part of the transmission controller.
 ;***********************************************************************************************
-
 ;***********************************************************************************************
 ;
-; ----------------------------------- MSnS460 Hardware Wiring ----------------------------------
+; ----------------------------------- MSnS300 Hardware Wiring ----------------------------------
 ;
 ;***********************************************************************************************
 ;
@@ -65,7 +49,6 @@
 ;  PTA3     - Vehicle Speed
 ;  PTA4     - Ignition Monitor
 ;  PTA5     - Fuel/Ignition Trim Select
-;  PTA6     - Knock Detector Input
 ;
 ; ----- Outputs [port name - function] -----
 ;
@@ -115,8 +98,8 @@
      include "gp32.equ"                   ; Include HC 908 equates
 .list                                     ; Turn on listing file
      org	   ram_start                  ; Origin  Memory location $0040(64)
-     include "MSnS460.inc"                ; Include definitions for
-                                          ; MSnS460.asm
+     include "MSnS300.inc"                ; Include definitions for
+                                          ; MSnS300.asm
 
 
 ;***********************************************************************************************
@@ -167,7 +150,7 @@ PLL_wait:
      mov     #$02,PORTA      ; Move %00000010 to Port A Data Regisister (preinit) Loopchk Lo,
                              ; Spark Hi, fuelp Lo,(SPOUT Lo, fuel pump off)
      mov     #$83,DDRA       ; Move %10000011 to Port A Data Direction Register Inputs on
-                             ; PTA6,5,4,3,2,= Knk_Det,Trm_Sel,Ign_Mon,Veh_Spd,DFC_en
+                             ; PTA6,5,4,3,2,= NA,Trm_Sel,Ign_Mon,Veh_Spd,DFC_en
                              ; Outputs on PTA7,1,0 = Loopchk, Spark, Fuel Pump
 
 ; Port B
@@ -358,7 +341,6 @@ ClearRAM:
      clr     rpmpl        ; Low part of RPM Period
      clr     rpmch        ; Counter for high part of RPM
      clr     rpmcl        ; Counter for low part of RPM
-     clr     mSx250       ; 250 Milliseconds counter
      clr     mSx100       ; 100 Milliseconds counter
      clr     mS           ; Milliseconds counter
      clr     uSx100       ; 100 Microseconds counter
@@ -409,8 +391,6 @@ ClearRAM:
                              ;(PIP_pL - PIP_pL_prv)
      clr     PIP_pH          ; PIP period Hi byte (PIP_tsH - PIP_tsH_prv)
      clr     PIP_pL          ; PIP period Lo byte (PIP_tsL - PIP_tsL_prv)
-     clr     PIP_pH_pred     ; Predicted PIP period Hi byte(PIP_pH + PIP_pH_dif)
-     clr     PIP_pL_pred     ; Predicted PIP period Lo byte(PIP_pL + PIP_pL_dif)
      clr     Delay_pH        ; Delay period from PIP to SPOUT, Hi byte
      clr     Delay_pL        ; Delay period from PIP to SPOUT, Lo byte
                              ;(16 bit result of Mul_Hi:Mul_Mid:Mul_Lo / $FF)
@@ -443,20 +423,7 @@ ClearRAM:
      clr     VScH            ; 100uS counter for vehicle speed Hi byte
      clr     VScL            ; 100uS counter for MPH Lo byte
      clr     odo             ; Odometer pulse counter
-     clr     tachcurH        ; Tachometer period current Hi byte
-     clr     tachcurL        ; Tachometer period current Lo byte
-     clr     tachTH          ; Tachometer period total Hi byte
-     clr     tachTM          ; Tachometer period total Mid byte
-     clr     tachTL          ; Tachometer period total Lo byte
-     clr     BnkflowHmv      ; Injector bank flow rate L/hr x 10 Hi byte for MV
-     clr     BnkflowLmv      ; Injector bank flow rate L/hr x 10 Lo byte for MV
-     clr     tachcnt         ; Tachometer counter for tachometer period averaging time
-     clr     battTH          ; Battery ADC total Hi Byte
-     clr     battTL          ; Battery ADC total Lo Byte
-     clr     battcnt         ; Counter for battery voltage ADC averaging
-     clr     egoTH           ; EGO ADC total Hi Byte
-     clr     egoTL           ; EGO ADC total Lo Byte
-     clr     egocnt          ; Counter for EGO voltage ADC averaging
+
 
 ;***********************************************************************************************
 ; - Initialize critical variables to some other acceptable starting value
@@ -483,20 +450,6 @@ ClearRAM:
      sta     batt
      lda     #$FF
      sta     last_tps
-     sta     PIP_pH_prv     ; 305 RPM 6 cyl, 229 RPM 8 cyl
-     sta     PIP_pL_prv     ; 305 RPM 6 cyl, 229 RPM 8 cyl
-     sta     tachH          ; 305 RPM 6 cyl, 229 RPM 8 cyl
-     sta     tachL          ; 305 RPM 6 cyl, 229 RPM 8 cyl
-
-;*********************************************************************************************
-; Copy injector bank flow rate configurable constants from Flash memory to RAM for use by
-; Megaview in fuel burn calculations.
-;*********************************************************************************************
-
-     lda     BnkflowH     ; Load accumulator with value in "BnkflowH"
-     sta     BnkflowHmv   ; Copy to "BnkflowHmv"
-     lda     BnkflowL     ; Load accumulator with value in "BnkflowL"
-     sta     BnkflowLmv   ; Copy to "BnkflowLmv"
 
 ;***********************************************************************************************
 ; - Fire up the ADC, and perform one conversion, Set up clock source for ADC
@@ -612,34 +565,6 @@ SET_LOOPCHK:
      bset    Loopchk,PORTA    ; Set "Loopchk" bit of Port A (LED on)
 
 LOOPCHK_DONE:
-
-;***********************************************************************************************
-;
-; - KnockSenseMS output "TIM” is normally high (+5 volts), and goes low (0 volts) when it
-;   detects a knock. “TIM” is connected to X1, a header pin on the daughter board which
-;   connects to header socket X1 on the MS board. X1 is traced to HC908 pin 39
-;   (PTA6) which was a spare input. PTA6 is polled every time through the main loop. If it is
-;   high “knocking” (bit 0) of “alarmbits” is cleared. If it is low, the bit is set.
-;
-;***********************************************************************************************
-
-;**********************************************************************************************
-; - Check the state of the Knock Sensor Input and act accordingly
-;**********************************************************************************************
-
-;CHK_KNOCK:
-     brclr   Knk_Det,porta,KNOCK_ON        ; If "Knk" (PTA6) is low, branch to KNOCK_ON:
-     brclr   knocking,alarmbits,KNOCK_DONE ; If "knocking" bit of "alarmbits" is already clear,
-                                           ; branch to KNOCK_DONE:
-     bclr    knocking,alarmbits            ; Clear "knocking" bit of "alarmbits"
-     bra     KNOCK_DONE                    ; Branch to KNOCK_DONE:
-
-KNOCK_ON:
-     brset   knocking,alarmbits,KNOCK_DONE ; If "knocking" bit of "alarmbits" is already set,
-                                           ; branch to KNOCK_DONE:
-     bset    knocking,alarmbits            ; Set "knocking" bit of "alarmbits"
-
-KNOCK_DONE:
 
 ;***********************************************************************************************
 ; - On start up, until we have received a minimum of 3 PIP signals so
@@ -860,7 +785,7 @@ ADC_LOOKUPS:
 ;ItrimCalc:
      clr     tmp1              ; Clear "tmp1"(0 volts)
      mov     #$FF,tmp2         ; Move decimal 255 to "tmp2"(5 volts)
-     mov     #$39,tmp3         ; Move decimal 57 to "tmp3" (20 degrees 8 cyl)
+     mov     #$2A,tmp3         ; Move decimal 42 to "tmp3" (20 degrees 6 cyl)
      clr     tmp4              ; Clear "tmp4"(0 degrees)
      mov     trim,tmp5         ; Move value in "trim" to "tmp5"(ADC value)
      jsr     lininterp         ; Jump to subroutine at linenterp:
@@ -889,7 +814,7 @@ FtrimCalc:
      jsr     lininterp         ; Jump to subroutine at linenterp:
      lda     tmp6              ; Load accumulator with value in "tmp6"(Result)
      sta     Ftrimcor          ; Copy to Fuel Trim Correction Factor
-     mov     #$1C,Trm_Ang_Fac  ; Move decimal 28 into "Trm_Ang_Fac" (no ign trim 8 cyl)
+     mov     #$15,Trm_Ang_Fac  ; Move decimal 21 into "Trm_Ang_Fac" (no ign trim 6 cyl)
 
 CHK_TRM_DONE:
      clrh                      ; Clear index register Hi byte
@@ -964,45 +889,32 @@ IGNITION_CALCS:
      lda     PIP_tsL        ; Load accumulator with value in PIP timestamp Lo byte
      sub     PIP_tsL_prv    ; Subtract A<-(A)-(M) PIP Timestamp previous Lo byte
      sta     PIP_pL         ; Copy result to PIP period Lo byte variable
-     sta     tachcurL       ; Copy to "tachcurL"
      lda     PIP_tsH        ; Load accumulator with value in PIP timestamp Hi byte
      sbc     PIP_tsH_prv    ; Subtract with carry A<-(A)-(M)-(C)
                             ;(PIP Timestamp previous Hi byte)
      sta     PIP_pH         ; Copy result to PIP period Hi byte variable
-     sta     tachcurH       ; Copy to "tachcurH"
+
 
 ;***********************************************************************************************
-; - 1/02/11 Skip the "predicted period" thing to see if it makes any real world difference
+; - Calculate "predicted" period to compensate for acceleration/deceleration
 ;***********************************************************************************************
 
      lda     PIP_pL          ; Load accumulator with value in "PIP_pL"
-     sta     PIP_pL_pred     ; Copy to "PIP_pL_pred"(for SPOUT on calcs)
-     sta     PIP_PeriodL     ; Copy to "PIP_PeriodL"(for SPOUT off calcs)
+     sub     PIP_pL_prv      ; Subtract A<-(A)-(M)(PIP_pL - PIP_pL_prv = PIP_pL_dif)
+     sta     PIP_pL_dif      ; Copy result to "PIP_pL_dif" variable
      lda     PIP_pH          ; Load accumulator with value in "PIP_pH"
-     sta     PIP_pH_pred     ; Copy to "PIP_pH_pred"(for SPOUT on calcs)
-     sta     PIP_PeriodH     ; Copy to "PIP_PeriodH"(for SPOUT off calcs)
-
-;*;***********************************************************************************************
-;*; - Calculate "predicted" period to compensate for acceleration/deceleration Tom Hafner
-;*;   (megaspark) reported better results with this method so I've always used it)
-;*;***********************************************************************************************
-
-;*     lda     PIP_pL          ; Load accumulator with value in "PIP_pL"
-;*     sub     PIP_pL_prv      ; Subtract A<-(A)-(M)(PIP_pL - PIP_pL_prv = PIP_pL_dif)
-;*     sta     PIP_pL_dif      ; Copy result to "PIP_pL_dif" variable
-;*     lda     PIP_pH          ; Load accumulator with value in "PIP_pH"
-;*     sbc     PIP_pH_prv      ; Subtract with carry A<-(A)-(M)-(C)
-;*                             ;(PIP_pH - PIP_pH_prv = PIP_pH_dif)
-;*     sta     PIP_pH_dif      ; Copy result to "PIP_pH_dif" variable
-;*     lda     PIP_pL          ; Load accumulator with value in "PIP_pL"
-;*     add     PIP_pL_dif      ; Add without Carry A<-(A)+(M)(PIP_pL + PIP_pL_dif = PIP_pL_pred)
-;*     sta     PIP_pL_pred     ; Copy to "PIP_pL_pred" variable(for SPOUT on calcs)
-;*     sta     PIP_PeriodL     ; Copy to PIP Period Lo byte(for SPOUT off calcs)
-;*     lda     PIP_pH          ; Load accumulator with value in "PIP_pH"
-;*     adc     PIP_pH_dif      ; Add with Carry A<-(A)+(M)
-;*                             ; (PIP_pH + PIP_pH_dif = PIP_pH_pred)
-;*     sta     PIP_pH_pred     ; Copy to "PIP_pH_pred" variable(for SPOUT on calcs)
-;*     sta     PIP_PeriodH     ; Copy to PIP Period Hi byte(for SPOUT off calcs)
+     sbc     PIP_pH_prv      ; Subtract with carry A<-(A)-(M)-(C)
+                             ;(PIP_pH - PIP_pH_prv = PIP_pH_dif)
+     sta     PIP_pH_dif      ; Copy result to "PIP_pH_dif" variable
+     lda     PIP_pL          ; Load accumulator with value in "PIP_pL"
+     add     PIP_pL_dif      ; Add without Carry A<-(A)+(M)(PIP_pL + PIP_pL_dif = PIP_pL_pred)
+     sta     PIP_pL_pred     ; Copy to "PIP_pL_pred" variable(for SPOUT on calcs)
+     sta     PIP_PeriodL     ; Copy to PIP Period Lo byte(for SPOUT off calcs)
+     lda     PIP_pH          ; Load accumulator with value in "PIP_pH"
+     adc     PIP_pH_dif      ; Add with Carry A<-(A)+(M)
+                             ; (PIP_pH + PIP_pH_dif = PIP_pH_pred)
+     sta     PIP_pH_pred     ; Copy to "PIP_pH_pred" variable(for SPOUT on calcs)
+     sta     PIP_PeriodH     ; Copy to PIP Period Hi byte(for SPOUT off calcs)
 
 ;***********************************************************************************************
 ; - Calculate delay time from PIP rising edge to drive SPOUT Hi (on).
@@ -1145,20 +1057,23 @@ IGNITION_CALCS:
      clr     intacc1             ; Clear intacc1 variable
      clr     intacc1+1           ; Clear intacc1+1 variable
      sthx    intacc2             ; Copy value in index register to intacc2 variable
-     lda     #$1D                ; Load accumulator with $1D ("RPMk" 8 cyl)
+     lda     #$27                ; Load accumulator with $27 ("RPMk" 6 cyl)
      sta     intacc1+2           ; Copy to "intacc1+2
-     lda     #$4C                ; Load accumulator with $4C ("RPMk+1" 8 cyl)
+     lda     #$10                ; Load accumulator with $10 ("RPMk+1" 6 cyl)
      sta     intacc1+3           ; Copy to "intacc1+3"
      jsr     udvd32              ; Jump to subroutine udvd32 (32x16 divide)
      lda     intacc1+3           ; Load accumulator with value in intacc1+3(8-bit RPM result)
+     ldx     intacc2+1           ; Load index register Lo byte with value in intacc2+1
+                                 ;(8 bit remainder)
+     jsr     DIVROUND            ; Jump to "DIVROUND" subroutine(round result)
      sta     rpm20               ; Copy to "rpm20"
      bra     RPM_CALC_DONE       ; Branch to RPM_CALC_DONE:
 
 FAST_RPM_CALC:
-     lda     #$1D          ; Load accumulator with $1D ("RPMk" 8 cyl)
+     lda     #$27          ; Load accumulator with $27 ("RPMk" 6 cyl)
      psha                  ; Push value in accumulator to stack
      pulh                  ; Pull value from stack to index register Hi byte
-     lda     #$4C          ; Load accumulator with $4C ("RPMK+1" 8 cyl)
+     lda     #$10          ; Load accumulator with $10 ("RPMK+1" 6 cyl)
      div                   ; Divide (A = (H:A) / X)
      jsr     DIVROUND      ; Jump to "DIVROUND" subroutine,(round result)
      sta     rpm20         ; Copy to "rpm20"
@@ -1206,77 +1121,6 @@ SET_RUN_E2:
 
 CHK_LO_SPD_DONE:
 
-;***********************************************************************************************
-; - The high resolution tach uses a time stamp from the ~1uS counters T2CNTH:T2CNTL which
-;   overflows at 306.044 RPM for 6 cyl, and 227.84 RPM for 8 cyl engines.
-;   It is saved as tachcurH:tachcurL
-;
-;   Resolution @ 5000 RPM is 1.25 RPM 6 cyl, 1.67 RPM 8 cyl
-;   Resolution @ 2500 RPM is 0.31 RPM 6 cyl, 0.42 RPM 8 cyl
-;   Resolution @ 1000 RPM is 0.05 RPM 6 cyl, 0.07 RPM 8 cyl
-;
-;   tachcurH:tachcurL is added to tachTH:tachTM:TachTL for 250 ms, then divided by the value of
-;   "tachcnt" which was incemented at every trigger signal, to smooth the read out.
-;
-;***********************************************************************************************
-
-;***********************************************************************************************
-; - First make sure that our engine speed is above roll over point for the 16 bit period value.
-;   If it is, do the Hi Res tach period averaging calculations, if not rail tachH:tachL, clear
-;   "tachcnt" so it will be at zero when the revs are within range and skip over.
-;***********************************************************************************************
-
-     brset   run,engine2,HI_RES_TACH     ; If "run" bit of "engine2" variable is set,
-                                         ; branch to HI_RES_TACH:
-     lda     #$FF                        ; Load accumulator with decimal 255
-     sta     tachH                       ; Copy to "tachH"
-     sta     tachL                       ; Copy to "tachL"
-     clr     tachcnt                     ; Clear "tachcnt"
-     jmp     HI_RES_TACH_DONE            ; Branch to HI_RES_TACH_DONE:
-
-HI_RES_TACH:
-     lda     tachTL       ; Load accumulator with value in "tachTL" (total Lo byte)
-     add     tachcurL     ; Add "tachcurL" A<-(A)+(M)(current period Lo Byte)
-     sta     tachTL       ; Copy to "tachTL"(result Lo byte)(updated total Lo byte
-     lda     tachTM       ; Load accumulator with value in "tachTM" (total Mid byte)
-     adc     tachcurH     ; Add with carry "tachcurH" A<-(A)+(M)(current period Hi Byte)
-     sta     tachTM       ; Copy to "tachTM"(result Mid byte)(updated total Mid byte
-     lda     tachTH       ; Load accumulator with value in "tachTH" (total Hi Byte)
-     adc     #$0          ; Add with carry decimal zero A<-(A)+(M)(just the carry)
-     sta     tachTH       ; Copy to "tachTH"(result Hi byte)(updated total Hi byte
-
-;***********************************************************************************************
-; - Check "clock250,inputs" to see if it's time to average the period values
-;***********************************************************************************************
-
-     brset   clock250,inputs,AV_HI_RES_PERIOD     ; If "clock250" bit of "inputs variable is
-                                                  ; set, branch to AV_HO_RES_PERIOD:
-     bra     HI_RES_TACH_DONE                     ; Branch to HI_RES_TACH_DONE:
-
-AV_HI_RES_PERIOD:
-     clr     intacc1             ; Clear intacc1 (divident Hi Byte)
-     clr     intacc1+1           ; Clear intacc1+1 (dividend Mid Hi Byte)
-     clr     intacc2             ; Clear intacc2 (divisor Hi Byte)
-     lda     tachTH              ; Load accumulator with value in "tachTH"
-     sta     intacc1+1           ; Copy to intacc1+1 (dividend Mid Hi Byte)
-     lda     tachTM              ; Load accumulator with value in "tachTM"
-     sta     intacc1+2           ; Copy to intacc1+2 (dividend Mid Lo Byte)
-     lda     tachTL              ; Load accumulator with value in "tachTL"
-     sta     intacc1+3           ; Copy to intacc1+3 (dividend Lo Byte)
-     lda     tachcnt             ; Load accumulator with value in "tachcnt"
-     sta     intacc2+1           ; Copy to intacc2+1 (divisor Lo Byte)
-     jsr     udvd32              ; Jump to "udcd32" subroutine (32x16 divide)
-     lda     intacc1+3           ; Load accumulator with value in intacc1+3 (result Lo Byte)
-     sta     tachL               ; Copy to "tachL"
-     lda     intacc1+2           ; Load accumulator with value in intacc1+2 (result Hi Byte)
-     sta     tachH               ; Copy to "tachH"
-     clr     tachTH              ; Clear "tachTH" (total Hi Byte)
-     clr     tachTM              ; Clear "tachTM" (total Mid Byte)
-     clr     tachTL              ; Clear "tachTL" (total Lo Byte)
-     clr     tachcnt             ; Clear "tachcnt" (tachometer period averaging counter)
-     bclr    clock250,inputs     ; Clear "clock250" bit of "inputs" variable
-
-HI_RES_TACH_DONE:
 
 ;***********************************************************************************************
 ; - Determine if engine RPMs are high enough that we have finished cranking,
@@ -1868,7 +1712,7 @@ TDE_CHK_DONE:
      clr     tpsaccel          ; Clear "tpsaccel" variable
 
 TDE_DONE:
-     bclr    clock100,inputs   ; Clear "clock100" bit of "inputs" variable
+     bclr    clock,inputs      ; Clear "clock" bit of "inputs" variable
 
 NO_CLOCK_PASS:
 
@@ -2213,12 +2057,8 @@ FINAL_PW_CALC:
                                ;(0.1mS resolution)
 
 ;***********************************************************************************************
-; - Divide fdhrH:fdhrL by 100, then add to ("dbCor") variable to produce Lo Res version ("fd")
-;   for MV and MT display, and Fuel Burn Calcs
-;   It is assumed that even with a 0.9 ms dead band the actual deadband may be less which can be
-;   tuned around, but skews the fuel burn calcultaions especially at smaller pulse widths.
-;   Adding the "dbCor" value will attempt to solve this problem by making the fuel delivery
-;   variable larger
+; - Divide fdhrH:fdhrL by 100 to produce Lo Res version ("fd") for MV and MT display,
+;   and Fuel Burn Calcs
 ;***********************************************************************************************
 
      ldhx     fdhrH          ; Load index register with value in fdhrH:fdhrL
@@ -2226,7 +2066,6 @@ FINAL_PW_CALC:
      ldx      #$64           ; Load index register Lo byte with decimal 100
      div                     ; Divide (A)<-(H:A)/(X);(H)rem
      jsr      DIVROUND       ; Jump to "DIVROUND" subroutine(round result)
-     add      dbCor          ; Add A<-(A)+(M) Deadband correction
      sta      fd             ; Copy result to Fuel Delivery Lo Res variable
 
 ;***********************************************************************************************
@@ -2452,28 +2291,10 @@ RPM_PERIOD:
      clr     RPMcL          ; Clear RPM counter Lo byte
 
 ;***********************************************************************************************
-; - Increment the counter for the Hi Res tachometer period averageing.
+; Increment after-start enrichment counter
 ;***********************************************************************************************
-
-     inc     tachcnt        ; Increment the tachometer averaging counter
-
-;***********************************************************************************************
-; If we are in ASE mode, and ignition cycle counter has been selected, Increment after-start
-; enrichment counter
-;***********************************************************************************************
-
-     brclr   startw,engine,NO_IGN_COUNT     ; If "startw" bit of "engine" variable is clear,
-                                            ; branch to NO_IGN_COUNT:
-     lda     ASEtype           ; Load accumulator with value in ASE type configuration variable
-     cmp     #$0               ; Compare it with decimal 0
-     beq     DO_IGN_COUNT      ; IF Z bit of CCR is set, branch to DO_IGN_COUNT: (ASEtype = 0)
-     bra     NO_IGN_COUNT      ; Branch to NO_IGN_COUNT: (ASEtype not = 0)
-
-DO_IGN_COUNT:
 
      inc    asecount
-
-NO_IGN_COUNT:
 
 ;***********************************************************************************************
 ; ------------------------------------- Fuel Section -------------------------------------------
@@ -2818,7 +2639,7 @@ INC_CUS:
      inc     uSx100            ; Increment 100 Microsecond counter
      lda     uSx100            ; Load accumulator with 100 Microsecond counter
      cmp     #$0A              ; Compare it with decimal 10
-     bne     TIM2CH0_ISR_JMP   ; If not equal, branch to TIM2CH0_ISR_JMP:
+     bne     TIM2CH0_ISR_DONE  ; If not equal, branch to TIM2CH0_ISR_DONE:
 
 ;===============================================================================================
 ;********************************* millisecond section *****************************************
@@ -2846,35 +2667,13 @@ INC_mS:
      lda     mS                  ; Load accumulator with value in Millisecond counter
      cmp     #$64                ; Compare it with decimal 100
      beq     DO_100MS            ; IF Z bit of CCR is set, branch to DO_100MS: (mS=100)
-     cmp     #$C8                ; Compare it with decimal 200
-     beq     DO_100MS            ; IF Z bit of CCR is set, branch to DO_100MS: (mS=200)
-     cmp     #$FA                ; Compare it with decimal 250
-     beq     DO_250MS            ; IF Z bit of CCR is set, branch to DO_250MS: (mS=250)
-     bra     TIM2CH0_ISR_JMP     ; Branch to TIM2CH0_ISR_JMP:
+     bra     TIM2CH0_ISR_DONE    ; Branch to TIM2CH0_ISR_DONE:
 
 ;===============================================================================================
 ;*********************************** 100 Millisecond section ***********************************
 ;===============================================================================================
 
 DO_100MS:
-
-;**********************************************************************************************
-; If we are in ASE mode, and 100 ms counter has been selected, Increment after-start
-; enrichment counter
-;**********************************************************************************************
-
-     brclr   startw,engine,NO_100MS_COUNT   ; If "startw" bit of "engine" variable is clear,
-                                            ; branch to NO_100MS_COUNT:
-     lda     ASEtype           ; Load accumulator with value in ASE type configuration variable
-     cmp     #$1               ; Compare it with decimal 1
-     beq     DO_100MS_COUNT    ; IF Z bit of CCR is set, branch to DO_100MS_COUNT: (ASEtype = 1)
-     bra     NO_100MS_COUNT    ; Branch to NO_100MS_COUNT: (ASEtype not = 1)
-
-DO_100MS_COUNT:
-
-     inc    asecount
-
-NO_100MS_COUNT:
 
 ;***********************************************************************************************
 ; - Increment "tpsaclk" counter for TPS DOT calculations
@@ -2889,87 +2688,17 @@ NO_100MS_COUNT:
 
      lda     tps                 ; Load accumulator with value in TPS ADC
      sta     last_tps            ; Copy to last TPS variable
-     bset    clock100,inputs     ; Set "clock100" bit of "inputs" variable
-     bra     TIM2CH0_ISR_DONE    ; Branch to TIM2CH0_ISR_DONE:
-
-
-;===============================================================================================
-;********************************* 250 Millisecond section *************************************
-;===============================================================================================
-
-DO_250MS:
-     bset    clock250,inputs     ; Set "clock250" bit of "inputs" variable
-
-;**********************************************************************************************
-; If we are in ASE mode, and 250 ms counter has been selected, Increment after-start
-; enrichment counter
-;**********************************************************************************************
-
-     brclr   startw,engine,NO_250MS_COUNT   ; If "startw" bit of "engine" variable is clear,
-                                            ; branch to NO_250MS_COUNT:
-     lda     ASEtype           ; Load accumulator with value in ASE type configuration variable
-     cmp     #$2               ; Compare it with decimal 2
-     beq     DO_250MS_COUNT    ; IF Z bit of CCR is set, branch to DO_250MS_COUNT: (ASEtype = 2)
-     bra     NO_250MS_COUNT    ; Branch to NO_250MS_COUNT: (ASEtype not = 2)
-
-DO_250MS_COUNT:
-
-     inc    asecount
-
-NO_250MS_COUNT:
+     bset    clock,inputs        ; Set "clock" bit of "inputs" variable
 
 ;***********************************************************************************************
-; - Increment 250 Millisecond counter and check to see if it's time to do the "500mS" section
+; - Increment 100 Millisecond counter
 ;***********************************************************************************************
 
      clr     mS                  ; Clear Millisecond counter
-     inc     mSx250              ; Increment 250 Millisecond counter
-     lda     mSx250              ; Load accumulator with value in 250 Millisecond counter
-     cmp     #$02                ; Compare with decimal 2
-     beq     DO_500MS            ; If the Z bit of CCR is set, branch to DO_500MS:
-     cmp     #$04                ; Compare with decimal 4
-     beq     DO_500MS            ; If the Z bit of CCR is set,branch to DO_500MS:
-     bra     TIM2CH0_ISR_DONE    ; Branch to TIM2CH0_ISR_DONE:
-
-;==============================================================================================
-;********************************* 500 Millisecond section ************************************
-;==============================================================================================
-
-DO_500MS:
-;*     bset    clock500,inputs     ; Set "clock500" bit of "inputs" variable
-
-;**********************************************************************************************
-; If we are in ASE mode, and 500 ms counter has been selected, Increment after-start
-; enrichment counter
-;**********************************************************************************************
-
-     brclr   startw,engine,NO_500MS_COUNT   ; If "startw" bit of "engine" variable is clear,
-                                            ; branch to NO_500MS_COUNT:
-     lda     ASEtype           ; Load accumulator with value in ASE type configuration variable
-     cmp     #$3               ; Compare it with decimal 3
-     beq     DO_500MS_COUNT    ; IF Z bit of CCR is set, branch to DO_500MS_COUNT: (ASEtype = 3)
-     bra     NO_500MS_COUNT    ; Branch to NO_500MS_COUNT: (ASEtype not = 3)
-
-DO_500MS_COUNT:
-
-     inc    asecount
-
-NO_500MS_COUNT:
-
-;***********************************************************************************************
-; - Check to see if it's time to do the "Seconds" section
-;***********************************************************************************************
-
-     lda     mSx250              ; Load accumulator with value in 250 Millisecond counter
-     cmp     #$04                ; Compare with decimal 4
-     beq     DO_SEC              ; If the Z bit of CCR is set,  branch to DO_SEC:
-     bra     TIM2CH0_ISR_DONE    ; Branch to TIM2CH0_ISR_DONE:
-
-;***********************************************************************************************
-; - Long branch for TIM2CH0_ISR_DONE:
-;***********************************************************************************************
-
-TIM2CH0_ISR_JMP:
+     inc     mSx100              ; Increment 100 Millisecond counter
+     lda     mSx100              ; Load accumulator with value in 100 Millisecond counter
+     cmp     #$0A                ; Compare with decimal 10
+     beq     DO_SEC              ; If the Z bit of CCR is set, branch to DO_SEC:
      bra     TIM2CH0_ISR_DONE    ; Branch to TIM2CH0_ISR_DONE:
 
 ;===============================================================================================
@@ -2977,24 +2706,6 @@ TIM2CH0_ISR_JMP:
 ;===============================================================================================
 
 DO_SEC:
-
-;**********************************************************************************************
-; If we are in ASE mode, and Seconds counter has been selected, Increment after-start
-; enrichment counter
-;**********************************************************************************************
-
-     brclr   startw,engine,NO_SEC_COUNT   ; If "startw" bit of "engine" variable is clear,
-                                            ; branch to NO_SEC_COUNT:
-     lda     ASEtype           ; Load accumulator with value in ASE type configuration variable
-     cmp     #$4               ; Compare it with decimal 4
-     beq     DO_SEC_COUNT      ; IF Z bit of CCR is set, branch to DO_SEC_COUNT: (ASEtype = 4)
-     bra     NO_SEC_COUNT      ; Branch to NO_SEC_COUNT: (ASEtype not = 4)
-
-DO_SEC_COUNT:
-
-     inc    asecount
-
-NO_SEC_COUNT:
 
 ;***********************************************************************************************
 ; - Save the current fuel delivery lo res total as "fdSecH:fdSecL" so it can be used by TS
@@ -3046,7 +2757,7 @@ CANT_OFF:
 ;***********************************************************************************************
 
 INC_SEC:
-     clr     mSx250              ; Clear 0.25 Second variable
+     clr     mSx100              ; Clear 0.1 Second variable
      inc     secl                ; Increment "Seconds" Lo byte variable
      bne     TIM2CH0_ISR_DONE    ; If the Z bit of CCR is clear, branch to TIM2CH0_ISR_DONE:
      inc     sech                ; Increment "Seconds" Hi byte variable
@@ -3280,7 +2991,7 @@ CHECK_TXCMD:
 
 MODE_R:                     ; (will accept either command)
 MODE_A:
-     lda     #$2A           ; Load accumulator with decimal 42(41 real time variables for
+     lda     #$28           ; Load accumulator with decimal 40(39 real time variables for
                             ; MV and TS)(Set this for the number of bytes to send +1)
      sta     txgoal         ; Copy to "txgoal" variable
      clr     txcnt          ; Clear "txcnt"
@@ -3468,172 +3179,16 @@ TX_DONE:                     ; (We get here after we've sent the last byte)
 ; and the process repeats until all channels are read, at which time, "adsel" is cleared to
 ; start the sequence again.
 ;
-; "ADR" values are averaged with values in memory to reduce "digit rattle" and minimize the
-; effects of spikes
-;
-;***********************************************************************************************
-
-;***********************************************************************************************
-;   This new code goes one step further to smooth out "batt" (adsel=4) and "ego" (adsel=5).
-;   "adsel" is updated avery 0.001s, so there is a new value for each ADC every 0.008s.
-;   Every time either "batt" or "ego" is updated, the value of "ADR" is totalled and it's
-;   counter value is incremented. When the counter reaches 32 the total is divided by 32 and the
-;   value of "batt" or "ego is updated, which works out to be every ~256ms.
 ;***********************************************************************************************
 
 ADC_ISR:
      pshh                 ; Push index register Hi byte on to stack (Do this because processor
                           ; does not stack H)
      clrh                 ; Clear index register Hi byte
-
-;***********************************************************************************************
-; - First determine if we are updating "batt" or "ego" and branch accordingly
-;***********************************************************************************************
-
-     lda     adsel         ; Load accumulator with value in ADC Channel Selector
-     cmp     #$04          ; Compare it to decimal 4
-     beq     BATT_CNT      ; If Z bit of CCR is set (operands equal) branch to BATT_CNT:
-     cmp     #$05          ; Compare it to decimal 5
-     beq     EGO_CNT       ; If Z bit of CCR is set (operands equal) branch to EGO_CNT:
-     bra     NOT_BATT_EGO  ; Branch to NOT_BATT_EGO:
-
-BATT_CNT:
-     lda     ADR          ; Load accumulator with value in ADC Data Register(this also clears
-                          ; conversion complete and interupt enable bit)
-     add     battTL       ; Add without Carry A<-(A)+(M) "ADR" + "battTL" (total Lo Byte)
-     sta     battTL       ; Copy to "battTL" (update total Lo Byte))
-     lda     battTH       ; Load accumulator with value in "battTH" (total Hi Byte)
-     adc     #$0          ; Add with carry decimal zero A<-(A)+(M)(just the carry)
-     sta     battTH       ; Copy to "battT" (update total Hi Byte))
-     inc     battcnt      ; Increment "battcnt" variable
-
-;***********************************************************************************************
-; - Check the value of "battcnt" to see if it's time to average the values
-;***********************************************************************************************
-
-     lda     battcnt      ; Load accumulator with value in "battcnt"
-     cmp     #$20         ; Compare value in "battcnt" to decimal 32
-     beq     BATT_AV;     ; If Z bit of CCR is set (operands equal) branch to BATT_AV:
-     bra     AV_DONE      ; Branch to AV_DONE:
-
-BATT_AV:
-;***********************************************************************************************
-; - First divide by 2
-;***********************************************************************************************
-
-     lsr     battTH     ; Logical shift right "battTH" (divide by 2 Hi Byte)
-     ror     battTL     ; Rotate right throught carry "battTL" (divide by 2 Lo Byte)
-
-;***********************************************************************************************
-; - Second divide by 2 (2x2=4 divide)
-;***********************************************************************************************
-
-     lsr     battTH     ; Logical shift right "battTH" (divide by 2 Hi Byte)
-     ror     battTL     ; Rotate right throught carry "battTL" (divide by 2 Lo Byte)
-
-;***********************************************************************************************
-; - Third divide by 2 (2x2x2=8 divide)
-;***********************************************************************************************
-
-     lsr     battTH     ; Logical shift right "battTH" (divide by 2 Hi Byte)
-     ror     battTL     ; Rotate right throught carry "battTL" (divide by 2 Lo Byte)
-
-;***********************************************************************************************
-; - Fourth divide by 2 (2x2x2x2=16 divide)
-;***********************************************************************************************
-
-     lsr     battTH     ; Logical shift right "battTH" (divide by 2 Hi Byte)
-     ror     battTL     ; Rotate right throught carry "battTL" (divide by 2 Lo Byte)
-
-;***********************************************************************************************
-; - Fifth divide by 2 (2x2x2x2x2=32 divide)
-;***********************************************************************************************
-
-     lsr     battTH     ; Logical shift right "battTH" (divide by 2 Hi Byte)
-     ror     battTL     ; Rotate right throught carry "battTL" (divide by 2 Lo Byte)
-     lda     battTL     ; Load accumulator with value in "battTL"
-     sta     batt       ; Copy to "batt"
-     clr     battTH     ; Clear "battTH"
-     clr     battTL     ; Clear "battTL"
-     clr     battcnt    ; Clear "battcnt"
-     bra     AV_DONE    ; Brancht to AV_DONE:
-
-EGO_CNT:
-     lda     ADR        ; Load accumulator with value in ADC Data Register(this also clears
-                        ; conversion complete and interupt enable bit)
-     add     egoTL      ; Add without Carry A<-(A)+(M) "ADR" + "egoTL" (total Lo Byte)
-     sta     egoTL      ; Copy to "egoTL" (update total Lo Byte))
-     lda     egoTH      ; Load accumulator with value in "egoTH" (total Hi Byte)
-     adc     #$0        ; Add with carry decimal zero A<-(A)+(M)(just the carry)
-     sta     egoTH      ; Copy to "egoT" (update total Hi Byte))
-     inc     egocnt     ; Increment "egocnt" variable
-
-;***********************************************************************************************
-; - Check the value of "egocnt" to see if it's time to average the values
-;***********************************************************************************************
-
-     lda     egocnt      ; Load accumulator with value in "egocnt"
-     cmp     #$20        ; Compare value in "battcnt" to decimal 32
-     beq     EGO_AV;     ; If Z bit of CCR is set (operands equal) branch to EGO_AV:
-     bra     AV_DONE     ; Branch to AV_DONE:
-
-EGO_AV:
-;***********************************************************************************************
-; - First divide by 2
-;***********************************************************************************************
-
-     lsr     egoTH     ; Logical shift right "egoTH" (divide by 2 Hi Byte)
-     ror     egoTL     ; Rotate right throught carry "egoTL" (divide by 2 Lo Byte)
-
-;***********************************************************************************************
-; - Second divide by 2 (2x2=4 divide)
-;***********************************************************************************************
-
-     lsr     egoTH     ; Logical shift right "egoTH" (divide by 2 Hi Byte)
-     ror     egoTL     ; Rotate right throught carry "egoTL" (divide by 2 Lo Byte)
-
-;***********************************************************************************************
-; - Third divide by 2 (2x2x2=8 divide)
-;***********************************************************************************************
-
-     lsr     egoTH     ; Logical shift right "egoTH" (divide by 2 Hi Byte)
-     ror     egoTL     ; Rotate right throught carry "egoTL" (divide by 2 Lo Byte)
-
-;***********************************************************************************************
-; - Fourth divide by 2 (2x2x2x2=16 divide)
-;***********************************************************************************************
-
-     lsr     egoTH     ; Logical shift right "egoTH" (divide by 2 Hi Byte)
-     ror     egoTL     ; Rotate right throught carry "egoTL" (divide by 2 Lo Byte)
-
-;***********************************************************************************************
-; - Fifth divide by 2 (2x2x2x2x2=32 divide)
-;***********************************************************************************************
-
-     lsr     egoTH     ; Logical shift right "egoTH" (divide by 2 Hi Byte)
-     ror     egoTL     ; Rotate right throught carry "egoTL" (divide by 2 Lo Byte)
-     lda     egoTL     ; Load accumulator with value in "egoTL"
-     sta     ego       ; Copy to "ego"
-     clr     egoTH     ; Clear "egoTH"
-     clr     egoTL     ; Clear "egoTL"
-     clr     egocnt    ; Clear "egocnt"
-
-AV_DONE:
-     lda     adsel        ; Load accumulator with value in ADC Channel Selector
-     inca                 ; Increment ADC Channel Selector Variable
-     sta     adsel        ; Copy new value to ADC Channel Selector Variable
-     pulh                 ; Pull value from stack to index register Hi byte
-     bset    adcc,inputs  ; Set "adcc"bit of "inputs" variable
-     rti                  ; Return from interrupt
-
-NOT_BATT_EGO:
      lda     adsel        ; Load accumulator with value in ADC Channel Selector
      tax                  ; Transfer value in accumulator to index register Lo
-     lda     map,x        ; Load accumulator with value in "map,x"
      lda     ADR          ; Load accumulator with value in ADC Data Register(this also clears
                           ; conversion complete and interupt enable bit)
-     add     map,x        ; Add without Carry A<-(A)+(M)
-     rora                 ; Rotate right accumulator (divide by two)
      sta     map,x        ; Copy result to address map,x
      lda     adsel        ; Load accumulator with value in ADC Channel Selector
      inca                 ; Increment ADC Channel Selector Variable
@@ -4234,7 +3789,7 @@ VE2XC:
 ;***********************************************************************************************
 
 REVNUM:          db     00T
-textversion_f:   db     'MSnS460 by Robert Hiebert ******'
+textversion_f:   db     'MSnS300 by Robert Hiebert ******'
 Signature:       db     'MS1/Extra format 029y3 *********'
 
 
@@ -4330,25 +3885,25 @@ Signature:       db     'MS1/Extra format 029y3 *********'
 flash_table1:
 
 VE_f:
-	db      43T,42T,41T,38T,36T,34T,33T,33T,33T,33T,33T,33T ; VE (0,0-11)(Bottom Row)
-	db      54T,54T,52T,53T,54T,54T,54T,54T,55T,56T,57T,57T ; VE (1,0-11)
-	db      66T,66T,64T,63T,65T,65T,65T,65T,66T,68T,69T,69T ; VE (2,0-11)
-	db      69T,69T,69T,70T,71T,72T,73T,74T,75T,76T,77T,78T ; VE (3,0-11)
-	db      70T,70T,71T,72T,73T,73T,74T,74T,75T,76T,77T,78T ; VE (4,0-11)
-	db      71T,71T,72T,73T,74T,74T,75T,76T,77T,78T,78T,79T ; VE (5,0-11)
-	db      72T,72T,73T,75T,76T,76T,76T,77T,78T,78T,79T,80T ; VE (6,0-11)
-	db      73T,73T,74T,75T,77T,78T,78T,78T,79T,80T,81T,82T ; VE (7,0-11)
-	db      74T,74T,75T,76T,78T,78T,78T,78T,79T,80T,81T,82T ; VE (8,0-11)
-	db      85T,85T,86T,87T,88T,89T,90T,91T,91T,91T,91T,91T ; VE (9,0-11)
-	db      101T,101T,102T,103T,105T,107T,109T,110T,110T,110T,109T,109T; VE (10,0-11)
-	db      104T,104T,105T,107T,110T,112T,114T,115T,115T,115T,114T,114T; VE (11,0-11)(Top Row)
+	db      53T,47T,49T,52T,49T,49T,49T,49T,49T,48T,47T,46T ; VE (0,0-11)(Bottom Row)
+	db      64T,61T,62T,69T,70T,61T,61T,60T,59T,59T,58T,57T ; VE (1,0-11)
+	db      88T,78T,70T,72T,64T,65T,65T,65T,65T,62T,59T,56T ; VE (2,0-11)
+	db      89T,80T,73T,64T,67T,67T,67T,67T,69T,65T,62T,60T ; VE (3,0-11)
+	db      85T,81T,74T,65T,67T,69T,69T,70T,71T,65T,62T,61T ; VE (4,0-11)
+	db      86T,82T,75T,71T,71T,71T,72T,73T,74T,71T,67T,62T ; VE (5,0-11)
+	db      89T,84T,77T,72T,74T,74T,74T,74T,75T,74T,71T,68T ; VE (6,0-11)
+	db      91T,91T,78T,71T,75T,75T,75T,75T,75T,72T,71T,68T ; VE (7,0-11)
+	db      91T,91T,81T,71T,76T,76T,76T,77T,75T,72T,70T,67T ; VE (8,0-11)
+	db      94T,94T,83T,83T,88T,88T,88T,88T,88T,85T,82T,80T ; VE (9,0-11)
+	db      98T,98T,99T,100T,101T,103T,103T,103T,103T,103T,98T,94T; VE (10,0-11)
+	db      99T,99T,100T,101T,102T,103T,103T,106T,106T,106T,102T,100T; VE (11,0-11)(Top Row)
 
 RPMRANGEVE_f:        ; RPMRANGEVE[0-11](Left to Right)
 	db      20T,35T,50T,60T,70T,80T,90T,100T,120T,140T,160T,180T
              ; 400,700,1000,1200,1400,1600,1800,2000,2400,2800,3200,3600
 
 KPARANGEVE_f:        ; KPARANGEVE[0-b](Bottom to Top)
-	db      17T,30T,45T,50T,55T,60T,65T,70T,75T,80T,85T,100T
+	db      30T,40T,45T,50T,55T,60T,65T,70T,75T,80T,85T,100T
 
 flash_table1_end:
 
@@ -4364,25 +3919,25 @@ flash_table1_end:
 flash_table2:
 
 ST_f:
-	db    207T,213T,184T,153T,145T,142T,136T,130T,125T,125T,122T,122T ;(0,0-11)(Bottom Row)
-	db    207T,213T,184T,153T,145T,142T,136T,130T,125T,125T,122T,122T ;(1,0-11)
-	db    190T,190T,173T,159T,150T,147T,142T,136T,133T,130T,128T,125T ;(2,0-11)
-	db    181T,181T,170T,162T,153T,150T,147T,139T,136T,133T,130T,128T ;(3,0-11)
-	db    184T,184T,173T,164T,156T,153T,150T,142T,139T,136T,133T,130T ;(4,0-11)
-	db    187T,187T,179T,170T,162T,159T,153T,145T,139T,139T,136T,136T ;(5,0-11)
-	db    193T,193T,184T,173T,164T,159T,153T,147T,139T,139T,136T,136T ;(6,0-11)
-	db    193T,193T,190T,181T,176T,167T,162T,153T,150T,147T,142T,139T ;(7,0-11)
-	db    196T,196T,193T,190T,187T,179T,170T,162T,156T,153T,147T,142T ;(8,0-11)
-	db    210T,210T,201T,196T,190T,184T,181T,173T,167T,162T,153T,147T ;(9,0-11)
-	db    221T,221T,215T,210T,204T,196T,190T,179T,176T,170T,162T,153T ;(10,0-11)
-	db    224T,224T,221T,218T,215T,204T,193T,187T,179T,173T,167T,162T ;(11,0-11)(Top Row)
+	db    191T,191T,189T,187T,185T,183T,181T,178T,174T,170T,166T,166T ;(0,0-11)(Bottom Row)
+	db    191T,191T,189T,187T,185T,183T,181T,178T,174T,170T,166T,166T ;(1,0-11)
+	db    191T,191T,189T,187T,185T,183T,181T,178T,174T,170T,166T,166T ;(2,0-11)
+	db    200T,200T,198T,195T,193T,191T,189T,187T,183T,178T,174T,174T ;(3,0-11)
+	db    206T,206T,204T,202T,200T,198T,195T,193T,189T,185T,181T,181T ;(4,0-11)
+	db    212T,212T,210T,208T,206T,204T,202T,200T,195T,191T,187T,187T ;(5,0-11)
+	db    217T,217T,215T,212T,210T,208T,206T,204T,200T,195T,191T,191T ;(6,0-11)
+	db    221T,221T,219T,217T,215T,212T,210T,208T,204T,200T,195T,195T ;(7,0-11)
+	db    225T,225T,223T,221T,219T,217T,215T,212T,208T,204T,200T,200T ;(8,0-11)
+	db    227T,227T,227T,225T,223T,221T,219T,217T,210T,206T,202T,202T ;(9,0-11)
+	db    229T,229T,229T,227T,227T,225T,225T,223T,219T,217T,215T,212T ;(10,0-11)
+	db    232T,232T,232T,229T,229T,227T,227T,225T,221T,219T,217T,215T ;(11,0-11)(Top Row)
 
 RPMRANGEST_f:        ; RPMRANGEST[0-11](Left to Right)
 	db      20T,35T,50T,60T,70T,80T,90T,100T,120T,140T,160T,180T
              ; 400,700,1000,1200,1400,1600,1800,2000,2400,2800,3200,3600
 
 KPARANGEST_f:        ; KPARANGEST[0-b](Bottom to Top)
-	db      17T,30T,45T,50T,55T,60T,65T,70T,75T,80T,85T,100T
+	db      30T,40T,45T,50T,55T,60T,65T,70T,75T,80T,85T,100T
 
 flash_table2_end:
 
@@ -4390,9 +3945,8 @@ flash_table2_end:
 ; AFR1 table and Ranges (copied into RAM on demand for tuning. (page = 3)(all pages 168 bytes)
 ; AFR1 values are AFRx10(Used for MLV VE Analyze only)
 ; KPARANGEAFR1 values are KPA, RPMRANGEAFR1 values are RPM/20
-;
-; Converted to Lambda 4/10/11
-;
+; This table is adjusted for the difference between AFR display and MS
+; Display = 13, MS = ~13.8
 ;**********************************************************************************************
 
      org     $E200    ;(57856)
@@ -4400,25 +3954,25 @@ flash_table2_end:
 flash_table3:
 
 AFR1_f:
-	db    88T,88T,88T,88T,88T,88T,88T,88T,88T,88T,88T,88T ;(0,0-11)(Bottom Row)
-	db    88T,88T,88T,88T,88T,88T,88T,88T,88T,88T,88T,88T ;(1,0-11)
-	db    88T,88T,88T,88T,88T,88T,88T,88T,88T,88T,88T,88T ;(2,0-11)
-	db    88T,88T,88T,88T,88T,88T,88T,88T,88T,88T,88T,88T ;(3,0-11)
-	db    88T,88T,88T,88T,88T,88T,88T,88T,88T,88T,88T,88T ;(4,0-11)
-	db    88T,88T,88T,88T,88T,88T,88T,88T,88T,88T,88T,88T ;(5,0-11)
-	db    88T,88T,88T,88T,88T,88T,88T,88T,88T,88T,88T,88T ;(6,0-11)
-	db    88T,88T,88T,88T,88T,88T,88T,88T,88T,88T,88T,88T ;(7,0-11)
-	db    88T,88T,88T,88T,88T,88T,88T,88T,88T,88T,88T,88T ;(8,0-11)
-	db    88T,88T,88T,88T,88T,88T,88T,88T,88T,88T,88T,88T ;(9,0-11)
-	db    88T,88T,88T,88T,88T,88T,88T,88T,88T,88T,88T,88T ;(10,0-11)
-	db    88T,88T,88T,88T,88T,88T,88T,88T,88T,88T,88T,88T ;(11,0-11)(Top Row)
+	db    138T,138T,138T,138T,138T,138T,138T,138T,138T,138T,138T,138T ;(0,0-11)(Bottom Row)
+	db    138T,138T,138T,138T,138T,138T,138T,138T,138T,138T,138T,138T ;(1,0-11)
+	db    138T,138T,138T,138T,138T,138T,138T,138T,138T,138T,138T,138T ;(2,0-11)
+	db    138T,138T,138T,138T,138T,138T,138T,138T,138T,138T,138T,138T ;(3,0-11)
+	db    138T,138T,138T,138T,138T,138T,138T,138T,138T,138T,138T,138T ;(4,0-11)
+	db    138T,138T,138T,138T,138T,138T,138T,138T,138T,138T,138T,138T ;(5,0-11)
+	db    138T,138T,138T,138T,138T,138T,138T,138T,138T,138T,138T,138T ;(6,0-11)
+	db    138T,138T,138T,138T,138T,138T,138T,138T,138T,138T,138T,138T ;(7,0-11)
+	db    138T,138T,138T,138T,138T,138T,138T,138T,138T,138T,138T,138T ;(8,0-11)
+	db    138T,138T,138T,138T,138T,138T,138T,138T,138T,138T,138T,138T ;(9,0-11)
+	db    138T,138T,138T,138T,138T,138T,138T,138T,138T,138T,138T,138T ;(10,0-11)
+	db    138T,138T,138T,138T,138T,138T,138T,138T,138T,138T,138T,138T ;(11,0-11)(Top Row)
 
 RPMRANGEAFR1_f:        ; RPMRANGEAFR1[0-11](Left to Right)
 	db      20T,35T,50T,60T,70T,80T,90T,100T,120T,140T,160T,180T
              ; 400,700,1000,1200,1400,1600,1800,2000,2400,2800,3200,3600
 
 KPARANGEAFR1_f:        ; KPARANGEAFR1[0-b](Bottom to Top)
-	db      17T,30T,45T,50T,55T,60T,65T,70T,75T,80T,85T,100T
+	db      30T,40T,45T,50T,55T,60T,65T,70T,75T,80T,85T,100T
 
 flash_table3_end:
 
@@ -4426,9 +3980,8 @@ flash_table3_end:
 ; AFR2 table and Ranges (copied into RAM on demand for tuning. (page = 4)(all pages 168 bytes)
 ; AFR2 values are AFRx10(Used for MLV VE Analyze only)
 ; KPARANGEAFR2 values are KPA, RPMRANGEAFR2 values are RPM/20
-;
-; Converted to Lambda 4/10/11
-;
+; This table is adjusted for the difference between AFR display and MS
+; Display = 13, MS = ~13.8
 ;**********************************************************************************************
 
      org     $E300    ;(58112)
@@ -4436,25 +3989,25 @@ flash_table3_end:
 flash_table4:
 
 AFR2_f:
-	db    88T,88T,88T,100T,116T,116T,116T,116T,116T,116T,116T,116T ;(0,0-11)(Bottom Row)
-	db    88T,88T,88T,100T,116T,116T,116T,116T,116T,116T,116T,116T ;(1,0-11)
-	db    88T,88T,100T,116T,116T,116T,116T,116T,116T,116T,116T,116T ;(2,0-11)
-	db    88T,88T,100T,116T,116T,116T,116T,116T,116T,116T,116T,116T ;(3,0-11)
-	db    88T,88T,100T,116T,116T,116T,116T,116T,116T,116T,116T,116T ;(4,0-11)
-	db    88T,88T,100T,116T,116T,116T,116T,116T,116T,116T,116T,116T ;(5,0-11)
-	db    88T,88T,100T,116T,116T,116T,116T,116T,116T,116T,116T,116T ;(6,0-11)
-	db    88T,88T,100T,116T,116T,116T,116T,116T,116T,116T,116T,116T ;(7,0-11)
-	db    88T,88T,100T,116T,116T,116T,116T,116T,116T,116T,116T,116T ;(8,0-11)
-	db    88T,88T,100T,100T,100T,100T,100T,100T,100T,100T,100T,100T ;(9,0-11)
-	db    88T,88T,88T,88T,88T,88T,88T,88T,88T,88T,88T,88T ;(10,0-11)
-	db    88T,88T,88T,88T,88T,88T,87T,87T,86T,86T,85T,85T ;(11,0-11)(Top Row)
+	db    138T,138T,138T,138T,156T,156T,156T,156T,156T,156T,156T,156T ;(0,0-11)(Bottom Row)
+	db    138T,138T,138T,138T,156T,180T,180T,180T,180T,180T,180T,180T ;(1,0-11)
+	db    138T,138T,156T,156T,180T,180T,180T,180T,180T,180T,180T,180T ;(2,0-11)
+	db    138T,138T,156T,180T,180T,180T,180T,180T,180T,180T,180T,180T ;(3,0-11)
+	db    138T,138T,156T,180T,180T,180T,180T,180T,180T,180T,180T,180T ;(4,0-11)
+	db    138T,138T,156T,180T,180T,180T,180T,180T,180T,180T,180T,180T ;(5,0-11)
+	db    138T,138T,156T,180T,180T,180T,180T,180T,180T,180T,180T,180T ;(6,0-11)
+	db    138T,138T,156T,180T,180T,180T,180T,180T,180T,180T,180T,180T ;(7,0-11)
+	db    138T,138T,156T,180T,180T,180T,180T,180T,180T,180T,180T,180T ;(8,0-11)
+	db    138T,138T,156T,156T,156T,156T,156T,156T,156T,156T,156T,156T ;(9,0-11)
+	db    138T,138T,138T,138T,138T,138T,138T,138T,138T,138T,138T,138T ;(10,0-11)
+	db    138T,138T,138T,138T,138T,138T,138T,137T,136T,135T,134T,133T ;(11,0-11)(Top Row)
 
 RPMRANGEAFR2_f:        ; RPMRANGEAFR2[0-11](Left to Right)
 	db      20T,35T,50T,60T,70T,80T,90T,100T,120T,140T,160T,180T
              ; 400,700,1000,1200,1400,1600,1800,2000,2400,2800,3200,3600
 
 KPARANGEAFR2_f:        ; KPARANGEAFR2[0-b](Bottom to Top)
-	db      17T,30T,45T,50T,55T,60T,65T,70T,75T,80T,85T,100T
+	db      30T,40T,45T,50T,55T,60T,65T,70T,75T,80T,85T,100T
 
 flash_table4_end:
 
@@ -4479,15 +4032,15 @@ WWURANGE:   db      0T       ; WWURANGE[0] -40 F
             db      200T     ; WWURANGE[9] +160 F
 
 
-WWU:        db      180T    ; WWU   Warmup bin @ -40 F
-            db      180T    ; WWU   Warmup bin @ -20 F
-            db      160T    ; WWU   Warmup bin @   0 F
-            db      150T    ; WWU   Warmup bin @ +20 F
-            db      145T    ; WWU   Warmup bin @ +40 F
-            db      140T    ; WWU   Warmup bin @ +60 F
-            db      135T    ; WWU   Warmup bin @ +80 F
-            db      125T    ; WWU   Warmup bin @ +100 F
-            db      118T    ; WWU   Warmup bin @ +130 F
+WWU:        db      190T    ; WWU   Warmup bin @ -40 F
+            db      190T    ; WWU   Warmup bin @ -20 F
+            db      180T    ; WWU   Warmup bin @   0 F
+            db      170T    ; WWU   Warmup bin @ +20 F
+            db      160T    ; WWU   Warmup bin @ +40 F
+            db      150T    ; WWU   Warmup bin @ +60 F
+            db      140T    ; WWU   Warmup bin @ +80 F
+            db      130T    ; WWU   Warmup bin @ +100 F
+            db      115T    ; WWU   Warmup bin @ +130 F
             db      100T    ; WWU   Warmup bin @ +160 F
 
 
@@ -4502,37 +4055,29 @@ TPSAQ:      db      20T     ; TPSAQ   Accel amount in 1ms units (tpsdot=0.1mS)
             db      50T     ; TPSAQ   Accel amount in 1ms units (tpsdot=1.5mS)
 cwu:        db      200T    ; CWU          Crank Enrichment at - 40 F
 cwh:        db      50T     ; CWH          Crank Enrichment at +165 F
-awev:       db      40T     ; AWEV         Afterstart Warmup % enrich add on value
+awev:       db      70T     ; AWEV         Afterstart Warmup % enrich add on value
 awc:        db      250T    ; AWC          Afterstart number of ignition cycles
 tpsacold:   db      90T     ; TPSACOLD     Accel amount at - 40 F in .1 mS units
 tpsthresh:  db      5T      ; TPSTHRESH    Accel difference over time threshold
 tpsasync:   db      2T      ; TPSASYNC     Accel enrich time in .1 sec increments
-req_fuel:   db      126T    ; REQFUEL      Required fuel constant
-divider:    db      2T      ; DIVIDER      IRQ divide factor for fuel pulse
+req_fuel:   db      92T     ; REQFUEL      Required fuel constant
+divider:    db      1T      ; DIVIDER      IRQ divide factor for fuel pulse
 Alternate:  db      1T      ; ALTERNATE    Alternate injector firing
-InjOpen:    db      9T      ; INJOPEN      Injector open time .1ms units
+InjOpen:    db      10T     ; INJOPEN      Injector open time .1ms units
 battfac:    db      12T     ; BATTFAC      Injector voltage compensation (mms/V)
 floodClear: db      200T    ; floodClear   tpsADC value for flood clear
 acmult:     db      100T    ; ACCELMULT    Accel cold mult factor (%/100)
-pru:        db      40T     ; PRU          Primer PW @ -40 F)(0.1mS res)
-prh:        db      20T     ; PRH          Primer PW @ 165 F)(0.1mS res)
-PIP_Angle:  db      90T     ; PIP_Angle    PIP angle in crank degrees (6cyl=120, 8cyl=90)
-CT_cnt:     db      48T     ; CT_cnt       Closed throttle position ADC count
-WOT_cnt:    db      237T    ; WOT_cnt      Wide Open throttle position ADC count
+pru:        db      200T    ; PRU          Primer PW @ -40 F)(0.1mS res)
+prh:        db      40T     ; PRH          Primer PW @ 165 F)(0.1mS res)
+PIP_Angle:  db      120T    ; PIP_Angle    PIP angle in crank degrees (6cyl=120, 8cyl=90)
+CT_cnt:     db      50T     ; CT_cnt       Closed throttle position ADC count
+WOT_cnt:    db      228T    ; WOT_cnt      Wide Open throttle position ADC count
 ASEhi:      db      250T    ; ASEhi        Set point above which ASE is active (F+40)
 ASElo:      db      190T    ; ASElo        Set point below which ASE is active (F+40)
 tpsdq:      db      1T      ; TPSDQ        Deceleration fuel cut %
 DFC_RPM     db      60T     ; DFC_RPM      Decel Fuel Cut min RPM (RPM/20)
 DFC_TPS     db      55T     ; DFC_TPS      Decel Fuel Cut min TPS (ADC)
-dbCor:      db      0T      ; dbCor        Deadband correction added to "fd"
-BnkflowH:   db      2T      ; BnkflowH     Injector bank flow rate L/hr x 10 Hi byte
-                            ;              configuration variable
-BnkflowL:   db      93T     ; BnkflowL     Injector bank flow rate L/hr x 10 Lo byte
-                            ;              configuration variable
-ASEtype:    db      0T      ; ASEtype      Configuration variable for ASE counter type
-                            ;              0 = ignition cycles, 1 = 100 ms counter,
-                            ;              2 = 250 ms counter, 3 = 500 ms counter
-                            ;              4 = 1 second counter
+
 
 flash_table5_end:
 
